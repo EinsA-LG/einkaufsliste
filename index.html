@@ -281,6 +281,8 @@
   /* ---------- Einkäufer / Footer ---------- */
   .purchaser-card { margin-top: 32px; }
   .purchaser-locked { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  .password-form { display: grid; gap: 10px; margin-top: 14px; max-width: 320px; }
+  .password-form .action-row { margin-top: 2px; }
   .purchaser-unlocked {
     display: flex;
     align-items: center;
@@ -392,6 +394,16 @@
       </div>
       <button class="btn btn-ghost" id="unlockBtn" type="button">Einkäufer-Ansicht öffnen</button>
     </div>
+    <form id="passwordForm" class="password-form" hidden>
+      <div class="field">
+        <label for="einkaeuferPw">Einkäufer-Passwort</label>
+        <input type="password" id="einkaeuferPw" autocomplete="off" placeholder="Passwort eingeben">
+      </div>
+      <div class="action-row">
+        <button class="btn btn-primary btn-small" id="confirmPwBtn" type="submit">Entsperren</button>
+        <button class="btn btn-ghost btn-small" id="cancelPwBtn" type="button">Abbrechen</button>
+      </div>
+    </form>
     <div id="purchaserUnlocked" class="purchaser-unlocked" hidden>
       <span class="badge-active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
@@ -473,10 +485,11 @@
 
   const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
-  let einkaeuferMode = false;
+  let einkaeuferPw = null;
   try {
-    einkaeuferMode = sessionStorage.getItem("einkaeuferMode") === "1";
+    einkaeuferPw = sessionStorage.getItem("einkaeuferPw");
   } catch (e) { /* Storage kann in Ausnahmefällen blockiert sein */ }
+  let einkaeuferMode = !!einkaeuferPw;
 
   const listArea = document.getElementById("listArea");
   const countPill = document.getElementById("countPill");
@@ -628,13 +641,9 @@
     }
 
     if (action === "check") {
-      const { error } = await sb
-        .from("items")
-        .update({ status: "done", purchased_at: new Date().toISOString() })
-        .eq("id", id);
+      const { error } = await sb.rpc("mark_item_purchased", { item_id: id, pw: einkaeuferPw });
       if (error) {
-        document.getElementById("purchaserStatus").textContent = "Konnte nicht abgehakt werden.";
-        document.getElementById("purchaserStatus").className = "status-msg error";
+        handleAuthError(error, "Konnte nicht abgehakt werden.");
         return;
       }
       row.classList.add("leaving");
@@ -642,10 +651,9 @@
     }
 
     if (action === "delete") {
-      const { error } = await sb.from("items").delete().eq("id", id);
+      const { error } = await sb.rpc("delete_item", { item_id: id, pw: einkaeuferPw });
       if (error) {
-        document.getElementById("purchaserStatus").textContent = "Konnte nicht gelöscht werden.";
-        document.getElementById("purchaserStatus").className = "status-msg error";
+        handleAuthError(error, "Konnte nicht gelöscht werden.");
         return;
       }
       row.classList.add("leaving");
@@ -653,26 +661,73 @@
     }
   });
 
-  /* ---------- Einkäufer-Ansicht (kein Passwort, nur ein Klick) ---------- */
+  function handleAuthError(error, fallbackMessage) {
+    const status = document.getElementById("purchaserStatus");
+    const isAuthError = /Passwort/i.test(error.message || "");
+    status.textContent = isAuthError
+      ? "Falsches oder abgelaufenes Passwort – bitte Einkäufer-Ansicht erneut öffnen."
+      : fallbackMessage;
+    status.className = "status-msg error";
+    if (isAuthError) {
+      einkaeuferMode = false;
+      einkaeuferPw = null;
+      try { sessionStorage.removeItem("einkaeuferPw"); } catch (e) {}
+      setUnlockedUI(false);
+      renderList(currentItems);
+    }
+  }
+
+  /* ---------- Einkäufer-Ansicht (passwortgeschützt) ---------- */
   const purchaserLocked = document.getElementById("purchaserLocked");
   const purchaserUnlocked = document.getElementById("purchaserUnlocked");
   const purchaserStatus = document.getElementById("purchaserStatus");
+  const passwordForm = document.getElementById("passwordForm");
+  const einkaeuferPwInput = document.getElementById("einkaeuferPw");
 
   function setUnlockedUI(isUnlocked) {
     purchaserLocked.hidden = isUnlocked;
     purchaserUnlocked.hidden = !isUnlocked;
+    if (isUnlocked) passwordForm.hidden = true;
   }
 
   document.getElementById("unlockBtn").addEventListener("click", function () {
+    purchaserLocked.hidden = true;
+    passwordForm.hidden = false;
+    purchaserStatus.textContent = "";
+    einkaeuferPwInput.value = "";
+    einkaeuferPwInput.focus();
+  });
+
+  document.getElementById("cancelPwBtn").addEventListener("click", function () {
+    passwordForm.hidden = true;
+    purchaserLocked.hidden = false;
+  });
+
+  passwordForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const pw = einkaeuferPwInput.value;
+    if (!pw) return;
+    const confirmBtn = document.getElementById("confirmPwBtn");
+    confirmBtn.disabled = true;
+    const { data, error } = await sb.rpc("check_einkaeufer_password", { pw: pw });
+    confirmBtn.disabled = false;
+    if (error || !data) {
+      purchaserStatus.textContent = "Falsches Passwort.";
+      purchaserStatus.className = "status-msg error";
+      return;
+    }
     einkaeuferMode = true;
-    try { sessionStorage.setItem("einkaeuferMode", "1"); } catch (e) {}
+    einkaeuferPw = pw;
+    try { sessionStorage.setItem("einkaeuferPw", pw); } catch (e) {}
+    purchaserStatus.textContent = "";
     setUnlockedUI(true);
     renderList(currentItems);
   });
 
   document.getElementById("lockBtn").addEventListener("click", function () {
     einkaeuferMode = false;
-    try { sessionStorage.removeItem("einkaeuferMode"); } catch (e) {}
+    einkaeuferPw = null;
+    try { sessionStorage.removeItem("einkaeuferPw"); } catch (e) {}
     setUnlockedUI(false);
     renderList(currentItems);
   });
