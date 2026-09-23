@@ -393,6 +393,14 @@
     <p class="status-msg" id="listStatus" role="status" aria-live="polite">Lade Liste …</p>
   </div>
 
+  <div class="no-print" style="text-align:center; margin-top:16px;">
+    <button class="btn btn-ghost btn-small" id="shareBtn" type="button">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>
+      Liste teilen
+    </button>
+    <p class="status-msg" id="shareStatus" role="status" aria-live="polite"></p>
+  </div>
+
   <section class="card purchaser-card">
     <div id="purchaserLocked" class="purchaser-locked">
       <div>
@@ -741,12 +749,8 @@
 
   if (einkaeuferMode) setUnlockedUI(true);
 
-  /* ---------- Drucken & Textexport ---------- */
-  document.getElementById("printBtn").addEventListener("click", function () {
-    window.print();
-  });
-
-  document.getElementById("downloadBtn").addEventListener("click", function () {
+  /* ---------- Drucken, Textexport & Teilen ---------- */
+  function buildListText() {
     const groups = groupByCategory(currentItems);
     let text = CONFIG.CLUB_NAME + " – Einkaufsliste\n";
     text += new Date().toLocaleDateString("de-DE") + "\n\n";
@@ -761,6 +765,15 @@
       });
       text += "\n";
     });
+    return text;
+  }
+
+  document.getElementById("printBtn").addEventListener("click", function () {
+    window.print();
+  });
+
+  document.getElementById("downloadBtn").addEventListener("click", function () {
+    const text = buildListText();
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -771,6 +784,69 @@
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   });
+
+  /* ---------- Teilen (fuer alle sichtbar, kein Passwort noetig) ---------- */
+  const shareBtn = document.getElementById("shareBtn");
+  const shareStatus = document.getElementById("shareStatus");
+
+  function showShareStatus(message, isError) {
+    shareStatus.textContent = message;
+    shareStatus.className = "status-msg " + (isError ? "error" : "ok");
+    setTimeout(function () { shareStatus.textContent = ""; }, 4000);
+  }
+
+  function legacyCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  function fallbackShare(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        showShareStatus("Liste wurde in die Zwischenablage kopiert – zum Einfügen in Notizen bereit.", false);
+      }).catch(function () {
+        if (legacyCopy(text)) {
+          showShareStatus("Liste wurde in die Zwischenablage kopiert – zum Einfügen in Notizen bereit.", false);
+        } else {
+          showShareStatus("Teilen wird von diesem Browser leider nicht unterstützt.", true);
+        }
+      });
+    } else if (legacyCopy(text)) {
+      showShareStatus("Liste wurde in die Zwischenablage kopiert – zum Einfügen in Notizen bereit.", false);
+    } else {
+      showShareStatus("Teilen wird von diesem Browser leider nicht unterstützt.", true);
+    }
+  }
+
+  if (shareBtn) {
+    shareBtn.addEventListener("click", async function () {
+      const text = buildListText();
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: CONFIG.CLUB_NAME + " – Einkaufsliste",
+            text: text
+          });
+        } catch (err) {
+          if (err && err.name !== "AbortError") {
+            fallbackShare(text);
+          }
+        }
+      } else {
+        fallbackShare(text);
+      }
+    });
+  }
 
   /* ---------- QR-Code ---------- */
   const qrPanel = document.getElementById("qrPanel");
