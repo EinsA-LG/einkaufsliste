@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Einkaufsliste</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Onest:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+  /* ============================================================
+     KONFIGURATION - hier bei Bedarf anpassen
+     ============================================================ */
+  :root {
+    --bg: #ffffff;
+    --surface: #f5f8f8;
+    --surface-alt: #eef4f4;
+    --border: #dde6e6;
+    --text: #1f2d31;
+    --text-muted: #62767b;
+    --accent: #b64444;
+    --accent-dark: #003046;
+    --accent-contrast: #ffffff;
+    --danger: #9c3a3a;
+    --radius-lg: 18px;
+    --radius-md: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 2px rgba(0,48,70,0.06), 0 8px 24px -12px rgba(0,48,70,0.18);
+    --font-display: "Onest", ui-sans-serif, system-ui, sans-serif;
+    --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c1517;
+      --surface: #121d20;
+      --surface-alt: #172528;
+      --border: #223437;
+      --text: #eef5f5;
+      --text-muted: #93a8ac;
+      --accent: #d97a7a;
+      --accent-dark: #003046;
+      --accent-contrast: #1a0a0a;
+      --danger: #e0a15a;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em; }
+  button, input, select, textarea { font-family: inherit; font-size: 1rem; }
+  a { color: var(--accent-dark); }
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 16px 48px;
+  }
+
+  /* ---------- Header ----------
+     Bewusst fest auf hellem Grund (nicht theme-abhaengig): das Logo
+     ist eine Rastergrafik in Marken-Navy und wuerde auf dunklem
+     Grund (Dark Mode) nicht mehr lesbar sein. */
+  header.top {
+    background: #ffffff;
+    border-bottom: 1px solid #dde6e6;
+    padding: calc(18px + env(safe-area-inset-top, 0px)) 16px 16px;
+  }
+  header.top .inner {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  header.top .brand-logo {
+    height: 40px;
+    width: auto;
+    display: block;
+  }
+  header.top .subtitle {
+    font-size: 0.95rem;
+    color: #62767b;
+    padding-left: 12px;
+    border-left: 1px solid #dde6e6;
+  }
+  header.top .accent-bar {
+    height: 4px;
+    width: 46px;
+    background: #b64444;
+    border-radius: 4px;
+    margin-top: 12px;
+  }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin-top: -28px;
+    position: relative;
+  }
+  .card + .card { margin-top: 24px; }
+  .card h2 {
+    margin: 0 0 4px;
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .card .hint {
+    margin: 0 0 16px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  /* ---------- Form ---------- */
+  form.add-form { display: grid; gap: 12px; }
+  .field { display: grid; gap: 6px; }
+  .field label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .field input, .field select {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 11px 12px;
+    width: 100%;
+  }
+  .field input:focus-visible, .field select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 480px) { .row2 { grid-template-columns: 1fr; } }
+
+  .btn {
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 12px 18px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-contrast); }
+  .btn-primary:hover { filter: brightness(0.95); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--accent-dark);
+    border: 1px solid var(--border);
+  }
+  @media (prefers-color-scheme: dark) { .btn-ghost { color: var(--text); } }
+  .btn-ghost:hover { background: var(--surface-alt); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--border); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-small { padding: 7px 12px; font-size: 0.85rem; }
+
+  .status-msg {
+    font-size: 0.88rem;
+    margin-top: 4px;
+    min-height: 1.2em;
+  }
+  .status-msg.error { color: var(--danger); }
+  .status-msg.ok { color: var(--accent-dark); }
+  @media (prefers-color-scheme: dark) { .status-msg.ok { color: var(--accent); } }
+
+  /* ---------- List ---------- */
+  .list-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 32px 0 12px;
+  }
+  .list-head h2 { margin: 0; font-size: 1.1rem; }
+  .count-pill {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+
+  .category-group { margin-bottom: 22px; }
+  .category-label {
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent-dark);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  @media (prefers-color-scheme: dark) { .category-label { color: var(--accent); } }
+  .category-label .line { flex: 1; height: 1px; background: var(--border); }
+
+  .item-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    margin-bottom: 8px;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  .item-row.leaving { opacity: 0; transform: translateX(8px); }
+
+  .check-btn {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .check-btn svg { width: 14px; height: 14px; opacity: 0; }
+  .check-btn.unlocked { border-color: var(--accent); }
+  .check-btn.unlocked:hover { background: var(--accent); }
+  .check-btn.unlocked:hover svg { opacity: 1; stroke: var(--accent-contrast); }
+  .check-btn.locked { cursor: pointer; opacity: 0.55; }
+  .check-btn.locked svg.lock { opacity: 1; width: 12px; height: 12px; stroke: var(--text-muted); }
+
+  .item-main { flex: 1; min-width: 0; }
+  .item-name { font-weight: 600; word-break: break-word; }
+  .item-meta { font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; }
+  .item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .icon-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+  }
+  .icon-btn:hover { background: var(--surface-alt); color: var(--danger); }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-muted);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .empty-state svg { width: 32px; height: 32px; stroke: var(--accent-dark); margin-bottom: 8px; }
+
+  /* ---------- Einkäufer / Footer ---------- */
+  .purchaser-card { margin-top: 32px; }
+  .purchaser-locked { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  .purchaser-unlocked {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  .badge-active {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 999px;
+  }
+  .badge-active svg { width: 12px; height: 12px; }
+  .action-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  footer.site-footer {
+    text-align: center;
+    color: rgba(255,255,255,0.75);
+    background: var(--accent-dark);
+    font-size: 0.82rem;
+    padding: 24px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    margin-top: 40px;
+  }
+
+  /* ---------- QR Panel ---------- */
+  .qr-panel {
+    display: none;
+    margin-top: 16px;
+    text-align: center;
+  }
+  .qr-panel.open { display: block; }
+  .qr-panel #qrcode { display: inline-block; padding: 14px; background: #fff; border-radius: var(--radius-md); }
+  .qr-panel p { color: var(--text-muted); font-size: 0.85rem; }
+
+  /* ---------- Print ---------- */
+  @media print {
+    header.top, .add-form-card, .purchaser-card, footer.site-footer, .no-print, .item-actions, .check-btn { display: none !important; }
+    body { background: #fff; color: #000; }
+    .card { box-shadow: none; border: none; padding: 0; margin-top: 0; }
+    .category-label { color: #000 !important; }
+  }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="inner">
+    <img class="brand-logo" id="brandLogo" src="einsa-logo.png" alt="EinsA">
+    <span class="subtitle">Einkaufsliste</span>
+  </div>
+  <div class="accent-bar"></div>
+</header>
+
+<div class="container">
+
+  <section class="card add-form-card">
+    <h2>Was fehlt?</h2>
+    <p class="hint">Artikel eintragen – erscheint sofort für alle auf der Liste.</p>
+    <form class="add-form" id="addForm">
+      <div class="field">
+        <label for="itemName">Artikel</label>
+        <input type="text" id="itemName" name="itemName" placeholder="z. B. Allzweckreiniger" required maxlength="120">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="itemCategory">Kategorie</label>
+          <select id="itemCategory" name="itemCategory"></select>
+        </div>
+        <div class="field">
+          <label for="itemQuantity">Menge (optional)</label>
+          <input type="text" id="itemQuantity" name="itemQuantity" placeholder="z. B. 2 Flaschen" maxlength="60">
+        </div>
+      </div>
+      <div class="field" id="customCategoryField" hidden>
+        <label for="itemCategoryCustom">Eigene Kategorie</label>
+        <input type="text" id="itemCategoryCustom" name="itemCategoryCustom" placeholder="Kategorie eingeben" maxlength="40">
+      </div>
+      <div class="field">
+        <label for="itemNote">Notiz (optional)</label>
+        <input type="text" id="itemNote" name="itemNote" placeholder="z. B. bitte die parfümfreie Variante" maxlength="140">
+      </div>
+      <button type="submit" class="btn btn-primary" id="submitBtn">Zur Liste hinzufügen</button>
+      <p class="status-msg" id="formStatus" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <div class="list-head">
+    <h2>Offene Einträge</h2>
+    <span class="count-pill" id="countPill">0</span>
+  </div>
+
+  <div id="listArea">
+    <p class="status-msg" id="listStatus" role="status" aria-live="polite">Lade Liste …</p>
+  </div>
+
+  <section class="card purchaser-card">
+    <div id="purchaserLocked" class="purchaser-locked">
+      <div>
+        <strong>Einkäufer-Ansicht</strong>
+        <p class="hint" style="margin:2px 0 0;">Zum Abhaken, Löschen, Drucken oder Herunterladen der Liste.</p>
+      </div>
+      <button class="btn btn-ghost" id="unlockBtn" type="button">Einkäufer-Ansicht öffnen</button>
+    </div>
+    <div id="purchaserUnlocked" class="purchaser-unlocked" hidden>
+      <span class="badge-active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+        Einkäufer-Ansicht aktiv
+      </span>
+      <div class="action-row">
+        <button class="btn btn-ghost btn-small" id="printBtn" type="button">Liste drucken</button>
+        <button class="btn btn-ghost btn-small" id="downloadBtn" type="button">Als Text herunterladen</button>
+        <button class="btn btn-danger btn-small" id="lockBtn" type="button">Schließen</button>
+      </div>
+    </div>
+    <p class="status-msg" id="purchaserStatus" role="status" aria-live="polite"></p>
+  </section>
+
+  <div class="no-print" style="text-align:center; margin-top:20px;">
+    <button class="btn btn-ghost btn-small" id="qrToggleBtn" type="button">QR-Code anzeigen</button>
+    <div class="qr-panel" id="qrPanel">
+      <div id="qrcode"></div>
+      <p>Dieser QR-Code führt immer zu dieser Liste – zum Ausdrucken und Aufhängen.</p>
+      <button class="btn btn-ghost btn-small" id="qrPrintBtn" type="button">Nur QR-Code drucken</button>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <span id="clubNameFooter">Verein</span> · Einkaufsliste
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================================================
+     KONFIGURATION – hier eure Werte eintragen
+     ============================================================ */
+  const CONFIG = {
+    SUPABASE_URL: "https://ulhanrkmsepzyvcvdcno.supabase.co",
+    SUPABASE_ANON_KEY: "sb_publishable_jNDfzzRDx6rWqW2CoM6wHQ_6j9x_v-4",
+    CLUB_NAME: "EinsA",
+    CATEGORIES: [
+      "Putzsachen",
+      "Büro & Verwaltung",
+      "Küche & Getränke",
+      "Hygiene",
+      "Technik",
+      "Sonstiges"
+    ]
+  };
+  const CUSTOM_VALUE = "__custom__";
+
+  document.getElementById("brandLogo").alt = CONFIG.CLUB_NAME;
+  document.getElementById("clubNameFooter").textContent = CONFIG.CLUB_NAME;
+  document.title = CONFIG.CLUB_NAME + " – Einkaufsliste";
+
+  const categorySelect = document.getElementById("itemCategory");
+  CONFIG.CATEGORIES.forEach(function (cat) {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    opt.textContent = cat;
+    categorySelect.appendChild(opt);
+  });
+  const customOpt = document.createElement("option");
+  customOpt.value = CUSTOM_VALUE;
+  customOpt.textContent = "Andere Kategorie …";
+  categorySelect.appendChild(customOpt);
+
+  const customField = document.getElementById("customCategoryField");
+  const customInput = document.getElementById("itemCategoryCustom");
+  categorySelect.addEventListener("change", function () {
+    customField.hidden = categorySelect.value !== CUSTOM_VALUE;
+  });
+
+  if (CONFIG.SUPABASE_URL.indexOf("DEIN-PROJEKT") !== -1) {
+    document.getElementById("listStatus").textContent =
+      "Konfiguration fehlt: Bitte SUPABASE_URL und SUPABASE_ANON_KEY im Quellcode eintragen (siehe Anleitung).";
+    document.getElementById("submitBtn").disabled = true;
+    return;
+  }
+
+  const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+
+  let einkaeuferMode = false;
+  try {
+    einkaeuferMode = sessionStorage.getItem("einkaeuferMode") === "1";
+  } catch (e) { /* Storage kann in Ausnahmefällen blockiert sein */ }
+
+  const listArea = document.getElementById("listArea");
+  const countPill = document.getElementById("countPill");
+  const listStatus = document.getElementById("listStatus");
+
+  const lockSvg = '<svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+  const checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>';
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function groupByCategory(items) {
+    const groups = {};
+    items.forEach(function (item) {
+      if (!groups[item.category]) groups[item.category] = [];
+      groups[item.category].push(item);
+    });
+    return groups;
+  }
+
+  function renderList(items) {
+    countPill.textContent = items.length;
+
+    if (items.length === 0) {
+      listArea.innerHTML =
+        '<div class="empty-state">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>' +
+        "<div>Die Liste ist leer – aktuell fehlt nichts.</div></div>";
+      return;
+    }
+
+    const groups = groupByCategory(items);
+    const catOrder = CONFIG.CATEGORIES.concat(Object.keys(groups).filter(function (c) {
+      return CONFIG.CATEGORIES.indexOf(c) === -1;
+    }));
+
+    let html = "";
+    catOrder.forEach(function (cat) {
+      const catItems = groups[cat];
+      if (!catItems || catItems.length === 0) return;
+      html += '<div class="category-group">';
+      html += '<div class="category-label">' + escapeHtml(cat) + '<span class="line"></span></div>';
+      catItems.forEach(function (item) {
+        const metaParts = [];
+        if (item.quantity) metaParts.push(escapeHtml(item.quantity));
+        if (item.note) metaParts.push(escapeHtml(item.note));
+        const meta = metaParts.length ? '<div class="item-meta">' + metaParts.join(" · ") + "</div>" : "";
+        const unlocked = einkaeuferMode;
+        html +=
+          '<div class="item-row" data-id="' + item.id + '">' +
+          '<button type="button" class="check-btn ' + (unlocked ? "unlocked" : "locked") +
+            '" data-action="check" title="' + (unlocked ? "Als gekauft abhaken" : "Nur für Einkäufer") + '">' +
+            (unlocked ? checkSvg : lockSvg) +
+          "</button>" +
+          '<div class="item-main"><div class="item-name">' + escapeHtml(item.name) + "</div>" + meta + "</div>" +
+          '<div class="item-actions">' +
+          (unlocked
+            ? '<button type="button" class="icon-btn" data-action="delete" title="Eintrag löschen">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m2 0-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7"/></svg>' +
+              "</button>"
+            : "") +
+          "</div></div>";
+      });
+      html += "</div>";
+    });
+    listArea.innerHTML = html;
+  }
+
+  let currentItems = [];
+
+  async function fetchItems() {
+    const { data, error } = await sb
+      .from("items")
+      .select("*")
+      .eq("status", "open")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      listStatus.textContent = "Liste konnte nicht geladen werden: " + error.message;
+      listStatus.className = "status-msg error";
+      return;
+    }
+    currentItems = data || [];
+    listStatus.textContent = "";
+    renderList(currentItems);
+  }
+
+  /* ---------- Formular: Artikel hinzufügen ---------- */
+  const addForm = document.getElementById("addForm");
+  const formStatus = document.getElementById("formStatus");
+  const submitBtn = document.getElementById("submitBtn");
+
+  addForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const name = document.getElementById("itemName").value.trim();
+    let category = categorySelect.value;
+    if (category === CUSTOM_VALUE) {
+      category = customInput.value.trim() || "Sonstiges";
+    }
+    const quantity = document.getElementById("itemQuantity").value.trim();
+    const note = document.getElementById("itemNote").value.trim();
+
+    if (!name) return;
+
+    submitBtn.disabled = true;
+    formStatus.textContent = "";
+    formStatus.className = "status-msg";
+
+    const { error } = await sb.from("items").insert({
+      name: name,
+      category: category,
+      quantity: quantity || null,
+      note: note || null,
+      status: "open"
+    });
+
+    submitBtn.disabled = false;
+
+    if (error) {
+      formStatus.textContent = "Konnte nicht hinzugefügt werden: " + error.message;
+      formStatus.className = "status-msg error";
+      return;
+    }
+
+    formStatus.textContent = "Hinzugefügt.";
+    formStatus.className = "status-msg ok";
+    addForm.reset();
+    customField.hidden = true;
+    fetchItems();
+    setTimeout(function () { formStatus.textContent = ""; }, 3000);
+  });
+
+  /* ---------- Liste: Klicks auf Abhaken / Löschen ---------- */
+  listArea.addEventListener("click", async function (e) {
+    const btn = e.target.closest("button[data-action]");
+    if (!btn) return;
+    const row = btn.closest(".item-row");
+    const id = row.getAttribute("data-id");
+    const action = btn.getAttribute("data-action");
+
+    if (action === "check" && !einkaeuferMode) {
+      document.getElementById("unlockBtn").focus();
+      document.getElementById("purchaserStatus").textContent =
+        "Zum Abhaken bitte zuerst die Einkäufer-Ansicht öffnen.";
+      return;
+    }
+
+    if (action === "check") {
+      const { error } = await sb
+        .from("items")
+        .update({ status: "done", purchased_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) {
+        document.getElementById("purchaserStatus").textContent = "Konnte nicht abgehakt werden.";
+        document.getElementById("purchaserStatus").className = "status-msg error";
+        return;
+      }
+      row.classList.add("leaving");
+      setTimeout(fetchItems, 250);
+    }
+
+    if (action === "delete") {
+      const { error } = await sb.from("items").delete().eq("id", id);
+      if (error) {
+        document.getElementById("purchaserStatus").textContent = "Konnte nicht gelöscht werden.";
+        document.getElementById("purchaserStatus").className = "status-msg error";
+        return;
+      }
+      row.classList.add("leaving");
+      setTimeout(fetchItems, 250);
+    }
+  });
+
+  /* ---------- Einkäufer-Ansicht (kein Passwort, nur ein Klick) ---------- */
+  const purchaserLocked = document.getElementById("purchaserLocked");
+  const purchaserUnlocked = document.getElementById("purchaserUnlocked");
+  const purchaserStatus = document.getElementById("purchaserStatus");
+
+  function setUnlockedUI(isUnlocked) {
+    purchaserLocked.hidden = isUnlocked;
+    purchaserUnlocked.hidden = !isUnlocked;
+  }
+
+  document.getElementById("unlockBtn").addEventListener("click", function () {
+    einkaeuferMode = true;
+    try { sessionStorage.setItem("einkaeuferMode", "1"); } catch (e) {}
+    setUnlockedUI(true);
+    renderList(currentItems);
+  });
+
+  document.getElementById("lockBtn").addEventListener("click", function () {
+    einkaeuferMode = false;
+    try { sessionStorage.removeItem("einkaeuferMode"); } catch (e) {}
+    setUnlockedUI(false);
+    renderList(currentItems);
+  });
+
+  if (einkaeuferMode) setUnlockedUI(true);
+
+  /* ---------- Drucken & Textexport ---------- */
+  document.getElementById("printBtn").addEventListener("click", function () {
+    window.print();
+  });
+
+  document.getElementById("downloadBtn").addEventListener("click", function () {
+    const groups = groupByCategory(currentItems);
+    let text = CONFIG.CLUB_NAME + " – Einkaufsliste\n";
+    text += new Date().toLocaleDateString("de-DE") + "\n\n";
+    Object.keys(groups).forEach(function (cat) {
+      text += cat.toUpperCase() + "\n";
+      groups[cat].forEach(function (item) {
+        const parts = [item.name];
+        if (item.quantity) parts.push("(" + item.quantity + ")");
+        text += "[ ] " + parts.join(" ");
+        if (item.note) text += " – " + item.note;
+        text += "\n";
+      });
+      text += "\n";
+    });
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "einkaufsliste.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  /* ---------- QR-Code ---------- */
+  const qrPanel = document.getElementById("qrPanel");
+  let qrRendered = false;
+  document.getElementById("qrToggleBtn").addEventListener("click", function () {
+    qrPanel.classList.toggle("open");
+    if (qrPanel.classList.contains("open") && !qrRendered && window.QRCode) {
+      new QRCode(document.getElementById("qrcode"), {
+        text: window.location.href,
+        width: 220,
+        height: 220,
+        colorDark: "#003046",
+        colorLight: "#ffffff"
+      });
+      qrRendered = true;
+    }
+  });
+  document.getElementById("qrPrintBtn").addEventListener("click", function () {
+    window.print();
+  });
+
+  /* ---------- Realtime-Sync ---------- */
+  sb.channel("items-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "items" }, function () {
+      fetchItems();
+    })
+    .subscribe();
+
+  fetchItems();
+})();
+</script>
+</body>
+</html>
