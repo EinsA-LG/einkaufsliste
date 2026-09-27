@@ -792,14 +792,17 @@
       photoUrl = publicUrlData.publicUrl;
     }
 
-    const { error } = await sb.from("items").insert({
+    const newItem = {
       name: name,
       category: category,
       quantity: quantity || null,
       note: note || null,
-      status: "open",
-      photo_url: photoUrl
-    });
+      status: "open"
+    };
+    // photo_url nur mitschicken, wenn wirklich ein Foto dabei ist
+    if (photoUrl) newItem.photo_url = photoUrl;
+
+    const { error } = await sb.from("items").insert(newItem);
 
     submitBtn.disabled = false;
 
